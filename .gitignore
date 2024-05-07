@@ -1,2 +1,5 @@
 # uncompressed reference files
 assets/*.tab
+
+# outputs
+output/
