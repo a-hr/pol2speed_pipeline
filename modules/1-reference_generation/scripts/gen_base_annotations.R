@@ -1,8 +1,6 @@
-require("biomaRt")
-require("tidyverse")
-library("dplyr")
-require("GenomicRanges")
-library("progress")
+library(tidyverse)
+
+options(scipen = 20)
 
 # ---- INPUTS ----
 args <- commandArgs(trailingOnly = TRUE)
@@ -10,43 +8,48 @@ args <- commandArgs(trailingOnly = TRUE)
 tmp.dir <- args[1]
 out.dir <- args[2]
 out.name <- args[3]
+ref.dir <- args[4]
 
-ensembl = useMart("ensembl", dataset="hsapiens_gene_ensembl")
 chrs <- c(1:22, "MT", "X", "Y")
 intron_thr <- 1
 
-# ----- QUERY ANNOTATIONS (biomaRt) -----
+# ----- QUERY ANNOTATIONS -----
 
 # get transcription start site for each transcript
-tss <-
-    getBM(
-        attributes = c(
+tss <- read_delim(
+    file = paste0(ref.dir, "/transcript_reference.tab"),
+    delim = "\t"
+    ) %>%
+    dplyr::select(all_of(
+        c(
             "transcription_start_site",
             "transcript_length",
             "chromosome_name",
             "strand",
             "ensembl_gene_id",
             "ensembl_transcript_id"
-        ),
-        mart = ensembl,
-    ) %>%
+        )
+    )) %>%
     dplyr::rename(tss_start = transcription_start_site) %>%
     dplyr::filter(chromosome_name %in% chrs)
 
 # get exon data for all the transcripts
-elocs <- getBM(
-    attributes = c(
-        "exon_chrom_start",
-        "exon_chrom_end",
-        "rank",
-        "chromosome_name",
-        "strand",
-        "ensembl_gene_id",
-        "ensembl_transcript_id"
-    ),
-    mart = ensembl,
-    filters = "chromosome_name",
-    values = chrs
+elocs <- read_delim(
+    file = paste0(ref.dir, "/exon_reference.tab"),
+    delim = "\t"
+    ) %>%
+    dplyr::select(all_of(
+        c(
+            "exon_chrom_start",
+            "exon_chrom_end",
+            "rank",
+            "chromosome_name",
+            "strand",
+            "ensembl_gene_id",
+            "ensembl_transcript_id"
+        )
+    )) %>%
+    dplyr::filter(chromosome_name %in% chrs
 )
 
 # get a list of gene ids with at least intron_thr + 1 exons
@@ -62,26 +65,10 @@ valid_transcripts <- tss %>%
     ) %>%
     pull(ensembl_transcript_id)
 
-# SAVE TABLES
-write.table(
-    valid_transcripts,
-    file = paste0(tmp.dir, "/", "start_valid_transcripts.csv"),
-    sep = ";",
-    quote = F,
-    row.names = F
-)
-
+# SAVE TABLE
 write.table(
     elocs,
     file = paste0(tmp.dir, "/", "start_elocs.csv"),
-    sep = ";",
-    quote = F,
-    row.names = F
-)
-
-write.table(
-    tss,
-    file = paste0(tmp.dir, "/", "start_tss.csv"),
     sep = ";",
     quote = F,
     row.names = F
@@ -98,13 +85,8 @@ introns <- data.frame(
     ensembl_transcript_id = c()
 )
 
-pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
-                       total = length(valid_transcripts),
-                       width = 100)      # Width of the progress bar
-
+print("Computing forward introns...")
 for (sample in valid_transcripts) {
-    pb$tick()
-    
     # get the exons contained in the sample transcript
     sample.exons <- elocs %>%
         dplyr::filter(ensembl_transcript_id == sample) %>%
@@ -145,19 +127,11 @@ introns <- merge(
     by.y = "ensembl_transcript_id"
 )
 
-write.table(
-    introns,
-    file = paste0(tmp.dir, "/", "introns_multi-intron_fw.csv"),
-    sep = ";",
-    quote = F,
-    row.names = F
-)
+introns.fw <- introns %>%
+    dplyr::mutate(strand = 1)
 
 # ----- COMPUTE REVERSE TABLE -----
-
-# load annotations
-# tss <- read.csv2("start_tss.csv")
-# elocs <- read.csv2("start_elocs.csv")
+print("Computing reverse introns...")
 
 multi.exon.tc <- elocs %>%
     dplyr::filter(rank >= intron_thr + 1) %>%
@@ -180,18 +154,7 @@ introns <- data.frame(
     ensembl_transcript_id = c()
 )
 
-pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
-                       total = length(valid_transcripts),
-                       complete = "=",   # Completion bar character
-                       incomplete = "-", # Incomplete bar character
-                       current = ">",    # Current bar character
-                       clear = FALSE,    # If TRUE, clears the bar when finish
-                       width = 100)      # Width of the progress bar
-
-
 for (sample in valid_transcripts) {
-    pb$tick()
-    
     # get the exons contained in the sample transcript
     sample.exons <- elocs %>%
         dplyr::filter(ensembl_transcript_id == sample) %>%
@@ -230,20 +193,15 @@ introns <- merge(
     by = "ensembl_transcript_id"
 )
 
-write.table(
-    introns,
-    file = paste0(tmp.dir, "/", "introns_multi-intron_rv.csv"),
-    sep = ";",
-    quote = F,
-    row.names = F
-)
+introns.rv <- introns %>%
+    dplyr::mutate(strand = -1)
 
 # ----- MERGE FW-RV -----
-introns <- read.csv2("introns_multi-intron_fw.csv") %>%
-    dplyr::bind_rows(read.csv2("introns_multi-intron_rv.csv"))
+introns <- introns.fw %>%
+    dplyr::bind_rows(introns.rv)
 
-write.csv2(
+write_delim(
     introns,
-    paste0(out.dir, "/", out.name),
-    row.names = F
+    file = paste0(out.dir, "/", out.name),
+    delim = "\t"
 )

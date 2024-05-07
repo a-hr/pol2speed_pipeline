@@ -1,29 +1,26 @@
-library(dplyr)
 library(tidyverse)
-library(biomaRt)
 
+options(scipen = 20)
 
 # ---- INPUTS ----
 args <- commandArgs(trailingOnly = TRUE)
 
 collapse.introns.bed <- args[1]
-allintrons.100k.bed <- args[2]
-
-measurable.introns.bed <- args[3]
-intron.metadata.tsv <- args[4]
+length.filt.bed <- args[2]
+transcript.ref <- args[3]
+measurable.introns.bed <- args[4]
+intron.metadata.tsv <- args[5]
 
 # ---- Load data ----
-filtered.introns <- read.delim(
+filtered.introns <- read_delim(
     collapse.introns.bed,
-    header = F,
-    col.names = c("Chr", "Start", "End", ".TranscriptID", "Length", "Strand")
+    col_names = c("Chr", "Start", "End", ".TranscriptID", "Length", "Strand")
 ) %>%
     mutate(IntID = paste("Intron", rownames(.), sep = "."))
 
-all.introns <- read.delim(
-    allintrons.100k.bed,
-    header = F,
-    col.names = c("Chr", "Start", "End", ".TranscriptID", "Length", "Strand")
+all.introns <- read_delim(
+    length.filt.bed,
+    col_names = c("Chr", "Start", "End", ".TranscriptID", "Length", "Strand")
 )
 
 # ---- Demultiplex ENSTIDs and assign intron ID ----
@@ -36,20 +33,18 @@ meta.introns <- filtered.introns %>%
     dplyr::select(-".TranscriptID")
 
 # ---- Enrich with metadata ----
-ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
-
-annotations <- getBM(
-    filters = "ensembl_transcript_id",
-    values = unique(meta.introns$TranscriptID),
-    attributes = c(
+annotations <- read_delim(
+    file.path(transcript.ref),
+    delim = "\t",
+    col_select = c(
         "ensembl_transcript_id",
         "ensembl_gene_id",
         "start_position",
         "end_position",
         "external_gene_name"
-    ),
-    mart = ensembl
-)
+    )
+) %>%
+    dplyr::filter(ensembl_transcript_id %in% unique(meta.introns$TranscriptID))
 
 annotations <- annotations %>%
     mutate(GeneLength = end_position - start_position) %>%
@@ -69,18 +64,16 @@ filtered.introns %>%
     dplyr::select(c(Chr, Start, End, IntID, Length, Strand)) %>%
     rowwise() %>%
     mutate(Length = End - Start) %>%
-    write.table(
-        measurable.introns.bed,
-        sep = "\t",
-        quote = F,
-        col.names = F,
-        row.names = F
+    write_delim(
+        paste0(measurable.introns.bed, "2"),
+        delim = "\t",
+        quote = "none",
+        col_names = F
     )
 
 meta.introns %>%
-    write.table(
-        intron.metadata.tsv,
-        sep = "\t",
-        quote = F,
-        row.names = F
+    write_delim(
+        paste0(intron.metadata.tsv, "2"),
+        delim = "\t",
+        quote = "none"
     )

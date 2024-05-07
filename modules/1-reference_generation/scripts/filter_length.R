@@ -1,46 +1,37 @@
 library(tidyverse)
-library(patchwork)
-library(biomaRt)
+
+options(scipen = 20)
 
 # ---- INPUTS ----
 args <- commandArgs(trailingOnly = TRUE)
 
 no.pseudo.bed <- args[1]
-filtered.introns.bed <- args[2]
-
-gene.length.threshold <- 1e5
-intron.length.threshold <- 5e4
+out.name <- args[2]
+ref.dir <- args[3]
+gene.length.threshold <- as.numeric(args[4])
+intron.length.threshold <- as.numeric(args[5])
 
 # Read in the data
-introns.df <- read.table(
-    no.pseudo.bed,
-    sep = "\t",
-    header = FALSE
-) %>%
-    dplyr::select(-V5) %>%
-    rename(
-        "chr" = "V1",
-        "int.start" = "V2",
-        "int.end" = "V3",
-        "id.rank" = "V4",
-        "strand" = "V6"
+introns.df <- read_delim(
+        no.pseudo.bed,
+        col_names = c("chr", "int.start", "int.end", "id.rank", "V5", "strand")
     ) %>%
+    dplyr::select(-V5) %>%
     separate_wider_delim("id.rank", ": ", names = c("ensembl_transcript_id", "rank"))
 
 # Get annotations
-ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
-
-annotations <- getBM(
-    filters = "ensembl_transcript_id",
-    values = unique(introns.df$ensembl_transcript_id),
-    attributes = c(
-        "ensembl_transcript_id",
-        "ensembl_gene_id",
-        "start_position",
-        "end_position"
-    ),
-    mart = ensembl
-)
+annotations <- read_delim(
+        file = paste0(ref.dir, "/", "transcript_reference.tab")
+    ) %>%
+    dplyr::select(all_of(
+        c(
+            "ensembl_gene_id",
+            "ensembl_transcript_id",
+            "start_position",
+            "end_position"
+        )
+    )) %>%
+    dplyr::filter(ensembl_transcript_id %in% unique(introns.df$ensembl_transcript_id))
 
 introns.ann <- introns.df %>%
     left_join(y = annotations, by = "ensembl_transcript_id") %>%
@@ -71,10 +62,9 @@ introns.filt %>%
 introns.filt %>%
     unite(id.rank, c("ensembl_transcript_id", "rank")) %>%
     dplyr::select(c(chr, int.start, int.end, id.rank, intron_length, strand)) %>%
-    write.table(
-        filtered.introns.bed,
-        row.names = F,
-        quote = F,
-        sep = "\t"
+    write_delim(
+        out.name,
+        col_names = FALSE,
+        delim = "\t"
     )
 

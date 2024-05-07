@@ -1,24 +1,21 @@
 #!/usr/bin/env python
 import sys
 
-
 def main(infile: str, outfile: str) -> None:
     with open(infile, "r") as f:
         with open(outfile, "w") as bed:
             # skip header
             f.readline()
-
             while True:
                 l = f.readline()
                 if not l:
                     break
                 
-                exon_start, exon_end, rank, chr, strand, gene_id, tr_id = l.split(";")
-                strand = "+" if strand == "1" else "-"
-                tr_id = tr_id.strip("\n")
-                elements = [chr, exon_start, exon_end, f"{tr_id}: {rank}", "100", strand]
-                elements = [e.strip("\n") for e in elements]
-                bed_str = "\t".join(elements) + "\n"
+                tr_id, int_start, int_end, int_len, rank, intr_interval, chr_, strand = l.split("\t")
+                strand = "+\n" if strand == "1\n" else "-\n"
+                bed_str = "\t".join(
+                    [chr_, int_start, int_end, f"{tr_id}: {rank}", "100", strand]
+                    ).replace('"', '')
                 bed.writelines(bed_str)
 
 
