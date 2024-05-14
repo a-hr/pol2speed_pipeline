@@ -1,5 +1,1 @@
-NOTE: Remember to ungzip assets if compressed
-NOTE: generate python script to parse an options.yaml
-NOTE: convert to Nextflow and parallelize fwd/rv introns generation
-
-
+This repo has been deprecated in favour of https://github.com/a-hr/pol2speed-nf
