@@ -1,16 +1,15 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 
-env_path=/scratch/heral/envs/pol2speed
-bam_path=/scratch/heral/pol2speed/data
+eval "$(conda shell.bash hook)"
+conda activate pol2speed
 
-module load Python
-conda activate $env_path
-
-bams_dir=
-bed_path=
-output_path=
+bams_dir=/Users/varo/Desktop/frailty/bams
+bed_path=/Users/varo/Desktop/frailty/intron_ref.bed
+output_path=/Users/varo/Desktop/frailty/out
 
 # ---- Compute coverage ----
+which python
+
 python coverage.py \
     $bams_dir \
     $bed_path \
